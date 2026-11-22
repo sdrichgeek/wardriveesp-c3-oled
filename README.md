@@ -6,7 +6,8 @@ A board-targeted WardriveESP project for the ESP32-C3 0.42-inch OLED development
 
 - **v1.7.11** — the baseline image successfully flashed to three boards. Includes board display support and WardriveESP Wi-Fi/Bluetooth scanning and Wardrive Go bridge. It does not include AXEOFF/Axon detection.
 - **v1.7.12** — initial passive AXEOFF Axon signature detection over BLE and Wi-Fi capture. On a match the OLED briefly shows `AX` and the blue LED flashes; short-press BOOT cycles the dashboard, latest AXON log, and radio statistics.
-- **v1.7.13** — fixes Axon matching when AXEOFF service IDs are carried inside 128-bit BLE service UUIDs.
+- **v1.7.13** — superseded; its embedded BLE UUID byte order was incorrect. Do not install this release.
+- **v1.7.14** — corrects the embedded BLE UUID byte order so Axon service IDs can match.
 
 The complete flash packages and version-specific install commands are in [`releases`](releases/).
 
@@ -24,5 +25,7 @@ For prebuilt firmware, use a release ZIP and follow its included install guide. 
 ## Source and license
 
 Based on [RocketGod's WardriveESP](https://github.com/RocketGod-git/WardriveESP). This project preserves the upstream MIT license and notices. The CYD/board-specific release packages and install information identify the exact locally built images and target board.
+
+
 
 

@@ -8,21 +8,19 @@ These locally built firmware packages target the ESP32-C3 development board with
 
 This is the exact firmware image successfully flashed to the three boards. It supports the C3 0.42-inch OLED and WardriveESP Wi-Fi/Bluetooth scanning and the Wardrive Go bridge. It does not include AXEOFF/Axon detection.
 
-Install from `WardriveESP-ESP32-C3-OLED-v1.7.11-flashed.zip`; replace `COM4` with the board's assigned serial port:
-
-```powershell
-python -m esptool --chip esp32c3 -p COM4 -b 460800 write_flash --flash_mode dio --flash_freq 80m --flash_size 4MB 0x0 bootloader/bootloader.bin 0x8000 partition_table/partition-table.bin 0xe000 ota_data_initial.bin 0x20000 wardrive_bridge.bin
-```
-
 ### v1.7.12 — initial AXEOFF alerts
 
 Adds passive AXEOFF Axon signature detection from BLE advertisements and Wi-Fi beacons/probe requests. An alert briefly displays `AX` and flashes the blue LED. Short-press BOOT cycles the OLED through the dashboard, latest AXON log, and radio statistics.
 
-### v1.7.13 — BLE UUID matching fix
+### v1.7.13 — superseded
 
-Fixes Axon matching when AXEOFF service IDs are carried inside 128-bit BLE service UUIDs. Keeps the prior 16-bit UUID, company ID, and Wi-Fi signature checks. The alert displays `AX` and flashes the blue LED; BOOT cycles through the dashboard, latest AXON log, and radio statistics.
+Do not install v1.7.13. It attempted to match AXEOFF service IDs embedded in 128-bit BLE UUIDs, but used the wrong byte order and could still miss the signature. v1.7.14 corrects this.
 
-Install from `WardriveESP-ESP32-C3-OLED-v1.7.13.zip`. In a terminal opened in the extracted folder, replace `COM4` with the board's port:
+### v1.7.14 — Axon BLE UUID fix
+
+Correctly matches the Axon service IDs inside 128-bit BLE service UUIDs using their on-air little-endian byte order. It retains the existing 16-bit UUID, company ID, and Wi-Fi checks. On a match the display shows `AX` and the blue LED flashes. Short-press BOOT cycles through the dashboard, latest AXON log, and radio statistics.
+
+Install from `WardriveESP-ESP32-C3-OLED-v1.7.14.zip`. In a terminal opened in the extracted folder, replace `COM4` with the board's port:
 
 ```powershell
 python -m esptool --chip esp32c3 -p COM4 -b 460800 write_flash --flash_mode dio --flash_freq 80m --flash_size 4MB 0x0 bootloader/bootloader.bin 0x8000 partition_table/partition-table.bin 0xe000 ota_data_initial.bin 0x20000 WardriveESP-esp32c3-app.bin
@@ -38,4 +36,4 @@ Firmware is based on RocketGod's WardriveESP. The upstream project documents its
 
 - `WardriveESP-ESP32-C3-OLED-v1.7.11-flashed.zip`
 - `WardriveESP-ESP32-C3-OLED-v1.7.12.zip`
-- `WardriveESP-ESP32-C3-OLED-v1.7.13.zip`
+- `WardriveESP-ESP32-C3-OLED-v1.7.14.zip`
