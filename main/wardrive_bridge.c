@@ -80,7 +80,7 @@
 
 static const char *TAG = "WardriveESP";
 
-#define FW_VERSION     "1.7.12"
+#define FW_VERSION     "1.7.13"
 // Shown by `info` and the boot log only. Never part of FW_VERSION: the apps compare versions number by number, so
 // "1.6.6-dev" would read as 1.6.0 and get offered the published firmware as an "update".
 #define FW_TAG         ""
@@ -736,6 +736,15 @@ static const char *axon_ble_signature(const bt_rec_t *r, const struct ble_hs_adv
     for (uint8_t i = 0; i < f->num_uuids16; i++) {
         uint16_t id = f->uuids16[i].value;
         if (id == 0xFC81 || id == 0xFE6B || id == 0xFE6C) return id == 0xFC81 ? "uuid_FC81" : id == 0xFE6B ? "uuid_FE6B" : "uuid_FE6C";
+    }
+    // AXEOFF also recognizes these assigned service IDs when they are embedded
+    // in a 128-bit UUID. NimBLE stores UUID bytes in BLE little-endian order;
+    // bytes 12..13 become characters 4..7 of NimBLE's canonical UUID string.
+    for (uint8_t i = 0; i < f->num_uuids128; i++) {
+        const uint8_t *u = f->uuids128[i].value;
+        uint16_t id = (uint16_t)((uint16_t)u[12] << 8) | u[13];
+        if (id == 0xFC81 || id == 0xFE6B || id == 0xFE6C)
+            return id == 0xFC81 ? "uuid128_FC81" : id == 0xFE6B ? "uuid128_FE6B" : "uuid128_FE6C";
     }
     return NULL;
 }
