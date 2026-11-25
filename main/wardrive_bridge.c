@@ -80,7 +80,7 @@
 
 static const char *TAG = "WardriveESP";
 
-#define FW_VERSION     "1.7.14"
+#define FW_VERSION     "1.7.15"
 // Shown by `info` and the boot log only. Never part of FW_VERSION: the apps compare versions number by number, so
 // "1.6.6-dev" would read as 1.6.0 and get offered the published firmware as an "update".
 #define FW_TAG         ""
@@ -248,6 +248,9 @@ static volatile uint32_t s_tx_dropped = 0;     // BLE output frames dropped for 
 static uint16_t s_conn_handle   = BLE_HS_CONN_HANDLE_NONE;
 static uint16_t s_tx_val_handle = 0;
 static volatile bool s_notify_enabled = false;
+// The ESP32-C3 OLED can run Axon scanning without a Wardrive Go host. In standalone mode
+// the health task alternates BLE and Wi-Fi capture; other boards keep the host-controlled flow.
+static volatile bool s_axon_standalone = false;
 static volatile bool s_streaming      = false;
 static TaskHandle_t  s_scan_task      = NULL;
 static volatile uint32_t s_reply_id   = 1;
@@ -256,6 +259,7 @@ static volatile uint32_t s_sweeps     = 0;
 static volatile uint32_t s_last_aps   = 0;
 
 static bool host_linked(void) { return s_conn_handle != BLE_HS_CONN_HANDLE_NONE || s_usb_sessions; }
+static bool axon_standalone_active(void) { return s_axon_standalone && !host_linked() && !s_ota_active; }
 /// The Wi-Fi scan runs while a host holds the board, or with nobody linked while an offline run goes to the card.
 static bool scan_wanted(void) { return host_linked() || sdrun_active(); }
 static volatile bool s_bt_up = true;        // Bluetooth controller + host running (1.6.6: off while USB holds the board)
@@ -839,7 +843,7 @@ static void bt_task(void *arg) {
     bool scanning = (rc == 0);
     if (!scanning) { send_line("WD:ERR reason=bt_scan_failed rc=%d", rc); fails = 1; }
     bt_rec_t r;
-    while (s_bt_running && host_linked()) {
+    while (s_bt_running && (host_linked() || axon_standalone_active())) {
         if (xQueueReceive(s_bt_queue, &r, pdMS_TO_TICKS(100)) == pdTRUE) { send_bt_line(&r); continue; }
         if (scanning && !s_bt_window_done) continue;
         if (scanning) {
@@ -873,7 +877,7 @@ static void bt_task(void *arg) {
 /// True when the Bluetooth scan is running (or already was).
 static bool bt_start(void) {
     if (s_bt_running || s_bt_task) return true;
-    if (s_ota_active || !host_linked()) return false;
+    if (s_ota_active || (!host_linked() && !axon_standalone_active())) return false;
     if (!s_bt_queue) s_bt_queue = xQueueCreate(BT_QUEUE_LEN, sizeof(bt_rec_t));
     if (!s_bt_queue) s_bt_queue = xQueueCreate(BT_QUEUE_LEN / 2, sizeof(bt_rec_t));   // a tight heap: half a queue
     if (!s_bt_queue) { send_line("WD:ERR reason=no_memory"); return false; }
@@ -1569,7 +1573,7 @@ static void cap_task(void *arg) {
     uint8_t plan[MAX_CHANNELS];
     uint32_t sweeps = 0;
     cap_rec_t r;
-    while (s_cap_running && host_linked()) {
+    while (s_cap_running && (host_linked() || axon_standalone_active())) {
         size_t n = plan_copy(plan);
         if (n == 0) { vTaskDelay(pdMS_TO_TICKS(200)); continue; }
         for (size_t i = 0; i < n && s_cap_running; i++) {
@@ -1607,7 +1611,7 @@ static volatile scan_role_t s_role_retry = ROLE_WIFI;
 /// True when capture is running (or already was).
 static bool cap_start(void) {
     if (s_cap_running || s_cap_task) return true;
-    if (s_ota_active || !host_linked()) return false;
+    if (s_ota_active || (!host_linked() && !axon_standalone_active())) return false;
     // A full queue first; a busy board's heap may only hold a half or quarter one (it just drops more frames in a burst).
     for (int len = CAP_QUEUE_LEN; !s_cap_queue && len >= CAP_QUEUE_LEN / 4; len /= 2) {
         s_cap_queue = xQueueCreate(len, sizeof(cap_rec_t));
@@ -3481,6 +3485,7 @@ static void display_fill(display_status_t *st) {
     for (int i = 0; m[i] && i < (int)sizeof(st->mode) - 1; i++) st->mode[i] = (char)(m[i] - 32 * (m[i] >= 'a' && m[i] <= 'z'));
     st->ble = s_conn_handle != BLE_HS_CONN_HANDLE_NONE;
     st->usb = s_usb_sessions != 0;
+    st->standalone = axon_standalone_active();
     strlcpy(st->holder, s_holder, sizeof(st->holder));
     st->captures = s_cap_hs + s_cap_pmkid;
     st->bt_devices = s_bt_last;
@@ -3600,6 +3605,10 @@ static void board_init(void) {
 #endif
     }
     s_board = picked != BOARD_NONE ? picked : board_detect();
+    if (s_board == BOARD_C3_OLED042) {
+        s_axon_standalone = true;
+        s_role = ROLE_BT;  // Axon BLE signatures are the primary standalone detection source.
+    }
 #if CONFIG_IDF_TARGET_ESP32C3
     if (s_has_c3_oled && s_board != BOARD_C3_OLED042) { display_release(); s_has_c3_oled = false; }
 #endif
@@ -4606,7 +4615,7 @@ static void usb_session_end(usb_port_t *p, const char *reason) {
     if (!host_linked()) {
         s_switch_pending = false;
         stream_stop();
-        s_role = ROLE_WIFI;
+        s_role = s_axon_standalone ? ROLE_BT : ROLE_WIFI;
         plan_reset_to_all();
         s_holder[0] = '\0'; s_holder_ios = false;
         s_link_end = reason && !strcmp(reason, "host") ? LINK_END_RELEASED : LINK_END_LOST;
@@ -4623,7 +4632,9 @@ static void usb_hello(usb_port_t *p) {
         ESP_LOGI(TAG, "%s session open", sink_name(p->sink));
         if (!host_linked()) {
             s_role = ROLE_WIFI;
-            s_switch_pending = false;
+            s_switch_pending = s_axon_standalone &&
+                               (s_scan_task || s_bt_task || s_cap_task || s_csi_task);
+            if (s_axon_standalone) stream_stop();
             plan_reset_to_all();
         }
         if (p->sink == SINK_USB) s_usj_fail_ms = 0;
@@ -5315,7 +5326,9 @@ static int on_gap_event(struct ble_gap_event *event, void *arg) {
         s_notify_enabled = false;
         if (!s_usb_sessions) {
             s_role = ROLE_WIFI;
-            s_switch_pending = false;
+            s_switch_pending = s_axon_standalone &&
+                               (s_scan_task || s_bt_task || s_cap_task || s_csi_task);
+            if (s_axon_standalone) stream_stop();
             plan_reset_to_all();
         }
         ESP_LOGI(TAG, "phone connected");
@@ -5343,7 +5356,7 @@ static int on_gap_event(struct ble_gap_event *event, void *arg) {
         s_holder[0] = '\0'; s_holder_ios = false;
         s_switch_pending = false;
         stream_stop();
-        s_role = ROLE_WIFI;
+        s_role = s_axon_standalone ? ROLE_BT : ROLE_WIFI;
         plan_reset_to_all();
         start_advertising();
         offline_begin();
@@ -5560,7 +5573,7 @@ static void health_task(void *arg) {
     (void)arg;
     uint32_t last = 0, last_batt = 0;
     bool boot_run_checked = false, was_mounted = false, was_linked = false;
-    uint32_t linked_at = 0, last_closed = 0, role_tried = 0;
+    uint32_t linked_at = 0, last_closed = 0, role_tried = 0, axon_role_since = 0;
     int runs_said = 0;
     for (;;) {
         ble_cmds_for(1000);
@@ -5591,6 +5604,28 @@ static void health_task(void *arg) {
         if (!linked_now) runs_said = 0;
         was_mounted = mounted;
         was_linked = linked_now;
+        // The C3 OLED is an Axon detector first when no host is connected. Spend most of each
+        // cycle scanning BLE, with shorter Wi-Fi capture windows for Axon probe-request matches.
+        if (s_axon_standalone && !linked_now && !s_ota_active) {
+            scan_role_t next = s_role;
+            uint32_t dwell = s_role == ROLE_CAP ? 15000u : 45000u;
+            if (s_role != ROLE_BT && s_role != ROLE_CAP) next = ROLE_BT;
+            else if (axon_role_since && now - axon_role_since >= dwell)
+                next = s_role == ROLE_BT ? ROLE_CAP : ROLE_BT;
+            if (next != s_role) {
+                xSemaphoreTake(s_cmd_lock, portMAX_DELAY);
+                set_role(next);
+                xSemaphoreGive(s_cmd_lock);
+                axon_role_since = now;
+            } else if (!axon_role_since) {
+                axon_role_since = now;
+            }
+            if (!s_streaming && !s_bt_running && !s_cap_running && !s_csi_running &&
+                !s_scan_task && !s_bt_task && !s_cap_task && !s_csi_task)
+                stream_start();
+        } else {
+            axon_role_since = now;
+        }
         // A role that couldn't start: try again every 15 s once a block big enough for its task is free.
         scan_role_t want = s_role_retry;
 #if CONFIG_IDF_TARGET_ARCH_RISCV

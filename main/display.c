@@ -207,7 +207,7 @@ static void dashboard(const display_status_t *st, uint32_t now) {
     if (s_compact) {
         uint32_t up = (now - s_t0) / 1000;
         snprintf(buf, sizeof(buf), "%s %u", st->mode, st->channel); text(0, 0, buf, 1, true);
-        text(0, 8, st->usb ? "USB LINK" : st->ble ? "BT LINK" : "WAITING", 1, true);
+        text(0, 8, st->standalone ? "AXON ACTIVE" : st->usb ? "USB LINK" : st->ble ? "BT LINK" : "WAITING", 1, true);
         snprintf(buf, sizeof(buf), "AP %lu", (unsigned long)st->aps_live); text(0, 16, buf, 1, true);
         snprintf(buf, sizeof(buf), "%lu CAP %lu:%02lu", (unsigned long)st->captures, (unsigned long)(up / 60), (unsigned long)(up % 60));
         text(0, 26, buf, 1, true); return;
@@ -215,7 +215,7 @@ static void dashboard(const display_status_t *st, uint32_t now) {
     // row 1: who holds the board, uptime
     if (st->usb) snprintf(buf, sizeof(buf), "USB%s%.13s", st->holder[0] ? " " : "", st->holder);
     else if (st->ble) snprintf(buf, sizeof(buf), "BT%s%.13s", st->holder[0] ? " " : "", st->holder);
-    else snprintf(buf, sizeof(buf), "waiting for a phone");
+    else snprintf(buf, sizeof(buf), st->standalone ? "AXON DETECTOR" : "waiting for a phone");
     uint32_t up = (now - s_t0) / 1000;
     char upb[12];
     if (up < 3600) snprintf(upb, sizeof(upb), "%lu:%02lu", (unsigned long)(up / 60), (unsigned long)(up % 60));

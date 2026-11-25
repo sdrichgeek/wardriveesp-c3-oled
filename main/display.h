@@ -11,6 +11,7 @@ typedef struct {
     uint8_t  channel;        // channel being scanned (0 = none)
     char     mode[5];        // "WIFI", "CAP", "BT"
     bool     ble, usb;       // who holds the board
+    bool     standalone;     // on-device Axon detector running without Wardrive Go
     char     holder[17];     // the app's nickname ("" = didn't say)
     uint32_t captures;       // handshakes + PMKIDs this session
     uint32_t bt_devices;     // Bluetooth devices last window (BT mode)

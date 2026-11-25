@@ -1,39 +1,37 @@
 # WardriveESP for ESP32-C3 0.42-inch OLED
 
-These locally built firmware packages target the ESP32-C3 development board with the onboard 72x40 SSD1306-compatible OLED (SDA GPIO5, SCL GPIO6), blue LED (GPIO8, active-low), and BOOT button (GPIO9).
+Board-targeted firmware for the ESP32-C3 development board with the onboard 72x40 SSD1306-compatible OLED (SDA GPIO5, SCL GPIO6), blue LED (GPIO8, active-low), and BOOT button (GPIO9).
 
 ## Releases
 
 ### v1.7.11 — flashed baseline
 
-This is the exact firmware image successfully flashed to the three boards. It supports the C3 0.42-inch OLED and WardriveESP Wi-Fi/Bluetooth scanning and the Wardrive Go bridge. It does not include AXEOFF/Axon detection.
+The baseline image successfully flashed to three boards. Includes C3 OLED support and WardriveESP Wi-Fi/Bluetooth scanning with Wardrive Go. No AXEOFF/Axon detection.
 
 ### v1.7.12 — initial AXEOFF alerts
 
-Adds passive AXEOFF Axon signature detection from BLE advertisements and Wi-Fi beacons/probe requests. An alert briefly displays `AX` and flashes the blue LED. Short-press BOOT cycles the OLED through the dashboard, latest AXON log, and radio statistics.
+Adds passive Axon signature detection from BLE advertisements and Wi-Fi beacons/probe requests. An alert shows `AX` and flashes the blue LED. BOOT cycles through dashboard, latest AXON log, and radio statistics.
 
 ### v1.7.13 — superseded
 
-Do not install v1.7.13. It attempted to match AXEOFF service IDs embedded in 128-bit BLE UUIDs, but used the wrong byte order and could still miss the signature. v1.7.14 corrects this.
+Do not install v1.7.13. Its embedded BLE UUID check used the wrong byte order and could miss Axon signatures.
 
-### v1.7.14 — Axon BLE UUID fix
+### v1.7.14 — UUID byte-order fix
 
-Correctly matches the Axon service IDs inside 128-bit BLE service UUIDs using their on-air little-endian byte order. It retains the existing 16-bit UUID, company ID, and Wi-Fi checks. On a match the display shows `AX` and the blue LED flashes. Short-press BOOT cycles through the dashboard, latest AXON log, and radio statistics.
+Correctly matches Axon service IDs inside 128-bit BLE service UUIDs. This is the latest app-connected version before standalone scanning.
 
-Install from `WardriveESP-ESP32-C3-OLED-v1.7.14.zip`. In a terminal opened in the extracted folder, replace `COM4` with the board's port:
+### v1.7.15 — standalone Axon detector
+
+No Wardrive Go connection is needed to detect Axon signatures. On the C3 OLED, the firmware automatically scans BLE for 45 seconds, then performs 15 seconds of passive Wi-Fi capture, repeating the cycle. A match shows `AX` and flashes the blue LED. When disconnected, the display says `AXON ACTIVE`; BOOT cycles through the dashboard, latest Axon hit, and radio statistics. The latest hit/count are RAM-only and reset at reboot; this board has no SD logging. Wardrive Go is optional: connecting it returns control to the app's normal scan modes, and standalone scanning resumes after disconnect.
+
+Install from `WardriveESP-ESP32-C3-OLED-v1.7.15.zip`. In a terminal opened in the extracted folder, replace `COM4` with the assigned port:
 
 ```powershell
 python -m esptool --chip esp32c3 -p COM4 -b 460800 write_flash --flash_mode dio --flash_freq 80m --flash_size 4MB 0x0 bootloader/bootloader.bin 0x8000 partition_table/partition-table.bin 0xe000 ota_data_initial.bin 0x20000 WardriveESP-esp32c3-app.bin
 ```
 
-For each version, install Python 3 and esptool (`python -m pip install esptool`), connect the board by USB, find its COM port in Device Manager, extract the selected ZIP, and run that version's command from the extracted folder. Wait for the board to restart. Check package files against `SHA256SUMS.txt` if desired. The board must have 4 MB flash. Flashing replaces the current firmware.
+Install Python 3 and esptool (`python -m pip install esptool`), connect the board by USB, find its port in Device Manager, extract the ZIP, and run the command from the extracted folder. Wait for restart. Check the package files against `SHA256SUMS.txt` if needed. The board must have 4 MB flash. Flashing replaces the current firmware.
 
 ## Source and attribution
 
-Firmware is based on RocketGod's WardriveESP. The upstream project documents its supported boards, scanner behavior, and license at [RocketGod-git/WardriveESP](https://github.com/RocketGod-git/WardriveESP). The ESP32-C3 OLED support and Axon alert changes are local modifications for this board. Preserve upstream license and notices when redistributing.
-
-## Packages
-
-- `WardriveESP-ESP32-C3-OLED-v1.7.11-flashed.zip`
-- `WardriveESP-ESP32-C3-OLED-v1.7.12.zip`
-- `WardriveESP-ESP32-C3-OLED-v1.7.14.zip`
+Based on RocketGod's [WardriveESP](https://github.com/RocketGod-git/WardriveESP). Preserve the upstream license and notices when redistributing. The C3 OLED and Axon detector changes are local modifications for this board.
